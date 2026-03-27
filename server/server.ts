@@ -11,6 +11,7 @@ import OrderRouter from "./routes/ordersRoutes";
 import AddressRouter from "./routes/addressRoutes";
 import AdminRouter from "./routes/adminRoutes";
 import WishlistRouter from "./routes/wishlistRouter";
+import { seedProducts } from "./scripts/seedProducts";
 
 const app = express();
 
@@ -26,7 +27,7 @@ const startServer = async () => {
         app.use(clerkMiddleware());
 
         // Webhook route - must be before express.json()
-        app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
+       // app.post('/api/clerk', express.raw({ type: 'application/json' }), clerkWebhook);
 
         const port = process.env.PORT || 3000;
 
@@ -39,7 +40,8 @@ const startServer = async () => {
          app.use("/api/addresses", AddressRouter)
          app.use("/api/admin", AdminRouter)
          app.use("/api/wishlist", WishlistRouter)
-
+        //Seed dummy products if no products are present
+        await seedProducts(process.env.MONGODB_URI as string);
         app.listen(port, () => {
             console.log(`Server is running at http://localhost:${port}`);
         });

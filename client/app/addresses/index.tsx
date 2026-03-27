@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Header from "@/components/Header";
 import { COLORS } from "@/constants";
 import type { Address } from "@/constants/types";
-import { dummyAddress } from "@/assets/assets";
+import { useAuth } from "@clerk/clerk-expo";
+import api from "@/constants/api";
+import Toast from "react-native-toast-message";
 
 export default function Addresses() {
+    const { getToken } = useAuth();
     const [addresses, setAddresses] = useState<Address[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
@@ -19,6 +22,7 @@ export default function Addresses() {
     const [state, setState] = useState("");
     const [zipCode, setZipCode] = useState("");
     const [country, setCountry] = useState("");
+    const [phoneNumber, setPhoneNumber] = useState("");
     const [isDefault, setIsDefault] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
@@ -31,8 +35,20 @@ export default function Addresses() {
     }, []);
 
     const fetchAddresses = async () => {
-        setAddresses(dummyAddress as any);
-        setLoading(false);
+        try {
+            setLoading(true);
+            const token = await getToken();
+            const { data } = await api.get('/addresses', { headers: { Authorization: `Bearer ${token}` } });
+            setAddresses(data.data);
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to Fetch Addresses',
+                text2: error.response?.data?.message || "Something went wrong",
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleEditSearch = (item: Address) => {
@@ -44,18 +60,78 @@ export default function Addresses() {
         setState(item.state);
         setZipCode(item.zipCode);
         setCountry(item.country);
+        setPhoneNumber(item.phoneNumber || "");
         setIsDefault(item.isDefault);
         setModalVisible(true);
     };
 
     const handleSaveAddress = async () => {
-        setModalVisible(false);
-        resetForm();
-        fetchAddresses();
+        if (!street || !city || !state || !zipCode || !country || !phoneNumber) {
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Fields',
+                text2: 'Please fill all the fields',
+            });
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const token = await getToken();
+            const addressData = { type, street, city, state, zipCode, country, phoneNumber, isDefault };
+            
+            if (isEditing && editingId) {
+                await api.put(`/addresses/${editingId}`, addressData, { headers: { Authorization: `Bearer ${token}` } });
+            } else {
+                await api.post('/addresses', addressData, { headers: { Authorization: `Bearer ${token}` } });
+            }
+            
+            setModalVisible(false);
+            resetForm();
+            fetchAddresses();
+            
+            Toast.show({
+                type: 'success',
+                text1: 'Success',
+                text2: isEditing ? 'Address updated successfully' : 'Address added successfully',
+            });
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to Save Address',
+                text2: error.response?.data?.message || "Something went wrong",
+            });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const handleDeleteAddress = async (id: string) => {
-
+        Alert.alert("Delete Address", "Are you sure you want to delete this address?", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        const token = await getToken();
+                        await api.delete(`/addresses/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+                        fetchAddresses();
+                        Toast.show({
+                            type: 'success',
+                            text1: 'Deleted',
+                            text2: 'Address deleted successfully',
+                        });
+                    } catch (error: any) {
+                        Toast.show({
+                            type: 'error',
+                            text1: 'Failed to Delete Address',
+                            text2: error.response?.data?.message || "Something went wrong",
+                        });
+                    }
+                }
+            }
+        ]);
     };
 
     const resetForm = () => {
@@ -64,6 +140,7 @@ export default function Addresses() {
         setState("");
         setZipCode("");
         setCountry("");
+        setPhoneNumber("");
         setType("Home");
         setIsDefault(false);
         setIsEditing(false);
@@ -116,11 +193,20 @@ export default function Addresses() {
                                 <Text className="text-secondary leading-5 ml-7">
                                     {item.street}, {item.city}, {item.state} {item.zipCode}, {item.country}
                                 </Text>
+                                {item.phoneNumber && (
+                                    <View className="flex-row items-center mt-2 ml-7">
+                                        <Ionicons name="call-outline" size={14} color={COLORS.secondary} />
+                                        <Text className="text-secondary text-xs ml-1">{item.phoneNumber}</Text>
+                                    </View>
+                                )}
                             </View>
                         ))
                     )}
 
-                    <TouchableOpacity className="flex-row items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl mt-2 mb-8" onPress={openAddModal}>
+                    <TouchableOpacity 
+                        className="flex-row items-center justify-center p-4 border border-dashed border-gray-300 rounded-xl mt-2 mb-8" 
+                        onPress={openAddModal}
+                    >
                         <Ionicons name="add" size={24} color={COLORS.secondary} />
                         <Text className="text-secondary font-medium ml-2">Add New Address</Text>
                     </TouchableOpacity>
@@ -130,7 +216,7 @@ export default function Addresses() {
             {/* Add Address Modal */}
             <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
                 <View className="flex-1 justify-end bg-black/50">
-                    <View className="bg-white rounded-t-3xl p-6 h-[85%]">
+                    <View className="bg-white rounded-t-3xl p-6 h-[90%]">
                         <View className="flex-row justify-between items-center mb-6">
                             <Text className="text-xl font-bold text-primary">{isEditing ? "Edit Address" : "Add New Address"}</Text>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -142,34 +228,73 @@ export default function Addresses() {
                             <Text className="text-primary font-medium mb-2">Label</Text>
                             <View className="flex-row gap-3 mb-4">
                                 {["Home", "Work", "Other"].map((t) => (
-                                    <TouchableOpacity key={t} onPress={() => setType(t)} className={`px-4 py-2 rounded-full border ${type === t ? 'bg-primary border-primary' : 'bg-white border-gray-300'}`}>
+                                    <TouchableOpacity 
+                                        key={t} 
+                                        onPress={() => setType(t)} 
+                                        className={`px-4 py-2 rounded-full border ${type === t ? 'bg-primary border-primary' : 'bg-white border-gray-300'}`}
+                                    >
                                         <Text className={type === t ? 'text-white' : 'text-primary'}>{t}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
 
-                            <Text className="text-primary font-medium mb-2">Street Address</Text>
-                            <TextInput className="bg-surface p-4 rounded-xl text-primary mb-4" placeholder="123 Main St" value={street} onChangeText={setStreet} />
+                            <Text className="text-primary font-medium mb-2">Phone Number *</Text>
+                            <TextInput 
+                                className="bg-surface p-4 rounded-xl text-primary mb-4" 
+                                placeholder="+1 234 567 8900" 
+                                value={phoneNumber} 
+                                onChangeText={setPhoneNumber}
+                                keyboardType="phone-pad"
+                            />
+
+                            <Text className="text-primary font-medium mb-2">Street Address *</Text>
+                            <TextInput 
+                                className="bg-surface p-4 rounded-xl text-primary mb-4" 
+                                placeholder="123 Main St" 
+                                value={street} 
+                                onChangeText={setStreet} 
+                            />
 
                             <View className="flex-row gap-4 mb-4">
                                 <View className="flex-1">
-                                    <Text className="text-primary font-medium mb-2">City</Text>
-                                    <TextInput className="bg-surface p-4 rounded-xl text-primary" placeholder="New York" value={city} onChangeText={setCity} />
+                                    <Text className="text-primary font-medium mb-2">City *</Text>
+                                    <TextInput 
+                                        className="bg-surface p-4 rounded-xl text-primary" 
+                                        placeholder="New York" 
+                                        value={city} 
+                                        onChangeText={setCity} 
+                                    />
                                 </View>
                                 <View className="flex-1">
-                                    <Text className="text-primary font-medium mb-2">State</Text>
-                                    <TextInput className="bg-surface p-4 rounded-xl text-primary" placeholder="NY" value={state} onChangeText={setState} />
+                                    <Text className="text-primary font-medium mb-2">State *</Text>
+                                    <TextInput 
+                                        className="bg-surface p-4 rounded-xl text-primary" 
+                                        placeholder="NY" 
+                                        value={state} 
+                                        onChangeText={setState} 
+                                    />
                                 </View>
                             </View>
 
                             <View className="flex-row gap-4 mb-4">
                                 <View className="flex-1">
-                                    <Text className="text-primary font-medium mb-2">Zip Code</Text>
-                                    <TextInput className="bg-surface p-4 rounded-xl text-primary" placeholder="10001" value={zipCode} onChangeText={setZipCode} keyboardType="numeric" />
+                                    <Text className="text-primary font-medium mb-2">Zip Code *</Text>
+                                    <TextInput 
+                                        className="bg-surface p-4 rounded-xl text-primary" 
+                                        placeholder="10001" 
+                                        value={zipCode} 
+                                        onChangeText={setZipCode} 
+                                        keyboardType="numeric" 
+                                    />
                                 </View>
                                 <View className="flex-1">
-                                    <Text className="text-primary font-medium mb-2">Country</Text>
-                                    <TextInput className="bg-surface p-4 rounded-xl text-primary" placeholder="USA" value={country} onChangeText={setCountry} />
+                                    <Text className="text-primary font-medium mb-2">Country *</Text>
+                                    <TextInput 
+                                        className="bg-surface p-4 rounded-xl text-primary" 
+                                        placeholder="USA" 
+                                        value={country} 
+                                        onChangeText={setCountry} 
+                                    />
                                 </View>
                             </View>
 
@@ -180,7 +305,11 @@ export default function Addresses() {
                                 <Text className="text-primary">Set as default address</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity className="w-full bg-primary py-4 rounded-full items-center mb-10" onPress={handleSaveAddress} disabled={submitting} >
+                            <TouchableOpacity 
+                                className="w-full bg-primary py-4 rounded-full items-center mb-10" 
+                                onPress={handleSaveAddress} 
+                                disabled={submitting}
+                            >
                                 {submitting ? (
                                     <ActivityIndicator color="white" />
                                 ) : (

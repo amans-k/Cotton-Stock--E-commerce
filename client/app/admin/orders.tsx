@@ -2,9 +2,11 @@ import React, { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, RefreshControl, Alert, Modal, TouchableWithoutFeedback, FlatList } from "react-native";
 import { COLORS, getStatusColor } from "@/constants";
 import { Ionicons } from "@expo/vector-icons";
-import { dummyOrders, dummyUser } from "@/assets/assets";
+import { useAuth } from "@clerk/clerk-expo";
+import api from "@/constants/api";
 
 export default function AdminOrders() {
+    const { getToken } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [orders, setOrders] = useState([]);
@@ -17,12 +19,19 @@ export default function AdminOrders() {
     const STATUSES = ["placed", "processing", "shipped", "delivered", "cancelled"];
 
     const fetchOrders = async () => {
-        setOrders(dummyOrders.map((order: any) => ({
-            ...order,
-            user: dummyUser
-        })) as any);
-        setLoading(false);
-        setRefreshing(false);
+        try {
+            const token = await getToken();
+            const { data } = await api.get('/admin/orders', { headers: { Authorization: `Bearer ${token}` } });
+            if (data.success) {
+                setOrders(data.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch orders:", error);
+            Alert.alert("Error", "Failed to load orders");
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
 
     useEffect(() => {
@@ -41,9 +50,24 @@ export default function AdminOrders() {
 
     const updateStatus = async (newStatus: string) => {
         if (!selectedOrder) return;
-        setOrders(orders.map((order: any) => order._id === selectedOrder._id ? { ...order, orderStatus: newStatus } : order) as any);
-        setStatusModalVisible(false);
-        setUpdating(false);
+        try {
+            setUpdating(true);
+            const token = await getToken();
+            const { data } = await api.put(`/admin/orders/${selectedOrder._id}`, 
+                { orderStatus: newStatus }, 
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (data.success) {
+                Alert.alert("Success", "Order status updated successfully");
+                setStatusModalVisible(false);
+                fetchOrders();
+            }
+        } catch (error) {
+            console.error("Failed to update status:", error);
+            Alert.alert("Error", "Failed to update status");
+        } finally {
+            setUpdating(false);
+        }
     };
 
     if (loading && !refreshing) {
@@ -68,7 +92,7 @@ export default function AdminOrders() {
                     orders.map((order: any) => (
                         <View key={order._id} className="bg-white p-4 rounded-xl shadow-sm mb-4 border border-gray-100">
                             <View className="flex-row justify-between mb-2">
-                                <Text className="font-medium text-sm text-gray-400 ">Order ID : #{order._id}</Text>
+                                <Text className="font-medium text-sm text-gray-400">Order ID : #{order._id}</Text>
                                 <Text className="text-secondary text-xs">{new Date(order.createdAt).toLocaleDateString()}</Text>
                             </View>
 
@@ -91,8 +115,8 @@ export default function AdminOrders() {
 
                             <View className="mb-3">
                                 <Text className="text-xs text-secondary font-bold mb-2">ITEMS</Text>
-                                {order.items.map((item: any) => (
-                                    <View key={item._id} className="flex-row justify-between mb-1">
+                                {order.items?.map((item: any, index: number) => (
+                                    <View key={index} className="flex-row justify-between mb-1">
                                         <Text className="text-secondary text-xs flex-1">
                                             {item.quantity}x {item.product?.name || item.name}
                                             {(item.size) && (
@@ -102,14 +126,14 @@ export default function AdminOrders() {
                                             )}
                                         </Text>
                                         <Text className="text-secondary text-xs font-bold">
-                                            ${item.price.toFixed(2)}
+                                            ${(item.price * item.quantity).toFixed(2)}
                                         </Text>
                                     </View>
                                 ))}
                             </View>
 
                             <View className="flex-row justify-between items-center mt-2 pt-3 border-t border-gray-100">
-                                <Text className="text-primary font-bold text-lg">${order.totalAmount.toFixed(2)}</Text>
+                                <Text className="text-primary font-bold text-lg">${order.totalAmount?.toFixed(2) || '0.00'}</Text>
 
                                 <TouchableOpacity
                                     onPress={() => openStatusModal(order)}
@@ -126,14 +150,14 @@ export default function AdminOrders() {
 
             {/* STATUS MODAL */}
             <Modal visible={statusModalVisible} animationType="fade" transparent>
-                <TouchableWithoutFeedback onPress={() => setStatusModalVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => !updating && setStatusModalVisible(false)}>
                     <View className="flex-1 justify-end bg-black/50">
                         <View className="bg-white rounded-t-2xl p-4 max-h-[60%]">
                             <View className="flex-row justify-between items-center mb-4 pb-4 border-b border-gray-100">
                                 <Text className="text-lg font-bold text-primary">
                                     Update Order Status
                                 </Text>
-                                <TouchableOpacity onPress={() => setStatusModalVisible(false)}>
+                                <TouchableOpacity onPress={() => !updating && setStatusModalVisible(false)}>
                                     <Ionicons name="close" size={24} color={COLORS.secondary} />
                                 </TouchableOpacity>
                             </View>

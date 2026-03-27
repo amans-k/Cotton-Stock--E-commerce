@@ -2,52 +2,59 @@ import { View, Text, ActivityIndicator, ScrollView, Dimensions, TouchableOpacity
 import { Product } from "@/constants/types";
 import { useCart } from "@/context/CartContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useWishlist } from "@/context/WishlistContext";
-import { dummyProducts } from "@/assets/assets";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS } from "@/constants";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
+import api from "@/constants/api";
 
 const { width } = Dimensions.get("window");
 
-// Fixed: Changed to uppercase first letter (ProductDetails instead of productDetails)
 export default function ProductDetails() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
-    const { addToCart, itemCount } = useCart(); // Removed unused cartItems
+    const { addToCart, itemCount } = useCart();
     const { toggleWishlist, isInWishlist } = useWishlist();
     const [selectedSize, setSelectedSize] = useState<string | null>(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     
-    const fetchProduct = async () => {
-        setLoading(true);
-        const foundProduct = dummyProducts.find((product) => product._id === id);
-        setProduct(foundProduct as any);
-        setLoading(false);
-    }
+    const fetchProduct = useCallback(async () => {
+        try {
+            const { data } = await api.get(`/products/${id}`);
+            setProduct(data.data);
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to Fetch Product',
+                text2: error.response?.data?.message || "Something went wrong"
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [id]);
     
     useEffect(() => {
         fetchProduct();
-    }, [id, fetchProduct]); // Added fetchProduct to dependency array
+    }, [fetchProduct]);
     
     if (loading) {
         return (
-            <SafeAreaView className="flex-1 justify-center items-center">
+            <SafeAreaView className="flex-1 justify-center items-center bg-white">
                 <ActivityIndicator size={"large"} color={COLORS.primary} />
             </SafeAreaView>
-        )
+        );
     }
     
     if (!product) {
         return (
-            <SafeAreaView className="flex-1 justify-center items-center">
-                <Text>Product not found</Text>
+            <SafeAreaView className="flex-1 justify-center items-center bg-white">
+                <Text className="text-primary">Product not found</Text>
             </SafeAreaView>
-        )
+        );
     }
     
     const isLiked = isInWishlist(product._id);
@@ -67,7 +74,7 @@ export default function ProductDetails() {
             text1: 'Added to Cart',
             text2: `${product.name} added successfully`
         });
-    }
+    };
     
     return (
         <View className="flex-1 bg-white">
@@ -178,5 +185,5 @@ export default function ProductDetails() {
                 </TouchableOpacity>
             </View>
         </View>
-    )
+    );
 }

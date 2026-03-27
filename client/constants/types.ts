@@ -77,6 +77,7 @@ export interface Address {
     state: string;
     zipCode: string;
     country: string;
+    phoneNumber: string;  // ✅ Added phone number
     isDefault: boolean;
     createdAt: string;
 }
@@ -101,6 +102,7 @@ export interface Order {
         state: string;
         zipCode: string;
         country: string;
+        phoneNumber?: string;  // ✅ Optional phone number in order
     };
     paymentMethod: string;
     paymentStatus: "pending" | "paid" | "failed" | "refunded";

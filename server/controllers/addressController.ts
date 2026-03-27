@@ -16,11 +16,12 @@ export const getAddresses = async (req: Request, res: Response) => {
 //Post /api/addresses
 export const addAddress = async (req: Request, res: Response) => {
     try {
-        const { type, street, city, state, zipCode, country, isDefault } = req.body;
+        const { type, street, city, state, zipCode, country, phoneNumber, isDefault } = req.body;
 
         if (isDefault) {
             await Address.updateMany({ user: req.user._id }, { isDefault: false });
         }
+        
         const newAddress = await Address.create({
             user: req.user._id,
             type,
@@ -29,8 +30,10 @@ export const addAddress = async (req: Request, res: Response) => {
             state,
             zipCode,
             country,
+            phoneNumber,
             isDefault: isDefault || false
         });
+        
         res.status(201).json({ success: true, data: newAddress });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
@@ -41,7 +44,7 @@ export const addAddress = async (req: Request, res: Response) => {
 //PUT /api/addresses/:id
 export const updateAddress = async (req: Request, res: Response) => {
     try {
-        const { type, street, city, state, zipCode, country, isDefault } = req.body;
+        const { type, street, city, state, zipCode, country, phoneNumber, isDefault } = req.body;
         let addressItem = await Address.findById(req.params.id);
         
         if (!addressItem) {
@@ -64,6 +67,7 @@ export const updateAddress = async (req: Request, res: Response) => {
             state,
             zipCode,
             country,
+            phoneNumber,
             isDefault
         }, { new: true });
         

@@ -3,15 +3,17 @@ import React, { useEffect, useState } from 'react'
 import { useCart } from '@/context/CartContext'
 import { useRouter } from 'expo-router';
 import { Address } from '@/constants/types';
-import { dummyAddress } from '@/assets/assets';
 import Toast from 'react-native-toast-message';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '@/constants';
 import Header from '@/components/Header';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
+import api from '@/constants/api';
 
 export default function Checkout() {
-    const { cartTotal } = useCart();
+    const { getToken } = useAuth();
+    const { cartTotal, clearCart } = useCart();
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [pageLoading, setPageLoading] = useState(true);
@@ -23,23 +25,35 @@ export default function Checkout() {
     const total = cartTotal + shipping + tax;
     
     const fetchAddress = async () => {
-        const addrList = dummyAddress;
-        if (addrList.length > 0) {
-            //Find default or first
-            const def = addrList.find((a: any) => a.isDefault) || addrList[0];
-            setSelectedAddress(def as Address);
+        try {
+            const token = await getToken();
+            const { data } = await api.get('/addresses', { headers: { Authorization: `Bearer ${token}` } });
+            const addrList = data.data;
+            if (addrList.length > 0) {
+                //Find default or first
+                const def = addrList.find((a: Address) => a.isDefault) || addrList[0];
+                setSelectedAddress(def);
+            }
+        } catch (error) {
+            console.error("Error fetching checkout data:", error);
+            Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: "Failed to load checkout information"
+            });
+        } finally {
+            setPageLoading(false);
         }
-        setPageLoading(false);
     }
     
-    const handlePlaceOrder = () => {
+    const handlePlaceOrder = async () => {
         //Place order
         if (!selectedAddress) {
             Toast.show({
                 type: 'error',
                 text1: 'Error',
                 text2: 'Please add a shipping address'
-            })
+            });
             return;
         }
         if (paymentMethod === 'stripe') {
@@ -48,11 +62,37 @@ export default function Checkout() {
                 type: 'error',
                 text1: 'Info',
                 text2: 'Stripe not implemented yet'
-            })
+            });
             return;
         }
         //Cash on delivery
-        router.replace('/orders')
+        setLoading(true);
+        try {
+            const payload = {
+                shippingAddress: selectedAddress,
+                notes: 'Placed via app',
+                paymentMethod: "cash",
+            };
+            const token = await getToken(); // ✅ Added await here
+            const { data } = await api.post('/orders', payload, { headers: { Authorization: `Bearer ${token}` } });
+            if (data.success) {
+                await clearCart();
+                Toast.show({
+                    type: 'success',
+                    text1: 'Success',
+                    text2: 'Your order has been placed successfully'
+                });
+                router.replace('/orders');
+            }
+        } catch (error: any) {
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to place order',
+                text2: error.response?.data?.message || "Something went wrong"
+            });
+        } finally {
+            setLoading(false);
+        }
     }
     
     useEffect(() => {
@@ -64,7 +104,7 @@ export default function Checkout() {
             <SafeAreaView className='flex-1 bg-surface justify-center items-center'>
                 <ActivityIndicator size='large' color={COLORS.primary} />
             </SafeAreaView>
-        )
+        );
     }
     
     return (
@@ -84,6 +124,12 @@ export default function Checkout() {
                         <Text className='text-secondary leading-5'>
                             {selectedAddress.street}, {selectedAddress.city}{'\n'} {selectedAddress.state} {selectedAddress.zipCode} {'\n'} {selectedAddress.country}
                         </Text>
+                        {selectedAddress.phoneNumber && (
+                            <View className='flex-row items-center mt-2'>
+                                <Ionicons name="call-outline" size={14} color={COLORS.secondary} />
+                                <Text className='text-secondary text-xs ml-1'>{selectedAddress.phoneNumber}</Text>
+                            </View>
+                        )}
                     </View>
                 ) : (
                     <TouchableOpacity onPress={() => router.push('/addresses')} className='bg-white p-6 rounded-xl mb-6 items-center justify-center border-dashed border-2 border-gray-100'>
@@ -144,5 +190,5 @@ export default function Checkout() {
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
-    )
+    );
 }

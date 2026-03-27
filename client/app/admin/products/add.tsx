@@ -1,13 +1,17 @@
 import React, { useState } from "react";
-import { ScrollView, Text, TextInput, TouchableOpacity, View, Switch, Image, ActivityIndicator, Modal, FlatList, TouchableWithoutFeedback, Platform, } from "react-native";
+import { ScrollView, Text, TextInput, TouchableOpacity, View, Switch, Image, ActivityIndicator, Modal, FlatList, TouchableWithoutFeedback } from "react-native";
 import Toast from 'react-native-toast-message';
 import { COLORS } from "@/constants";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { CATEGORIES } from "@/constants";
+import { useRouter } from "expo-router";
+import { useAuth } from "@clerk/clerk-expo";
+import api from "@/constants/api";
 
 export default function AddProduct() {
-
+    const router = useRouter();
+    const { getToken } = useAuth();
     const [submitting, setSubmitting] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
 
@@ -38,13 +42,76 @@ export default function AddProduct() {
 
     // Add Product
     const handleSubmit = async () => {
-        if (!name || !price || !category || sizes.length < 1) {
+        if (!name || !price || !category) {
             Toast.show({
                 type: 'error',
                 text1: 'Missing Fields',
                 text2: 'Please fill in all required fields'
             });
             return;
+        }
+        
+        if (images.length === 0) {
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Images',
+                text2: 'Please upload at least one product image'
+            });
+            return;
+        }
+        
+        try {
+            setSubmitting(true);
+            const token = await getToken();
+            const formData = new FormData();
+            
+            // Basic Details
+            formData.append("name", name);
+            formData.append("description", description);
+            formData.append("price", price);
+            formData.append("stock", stock || '0');
+            formData.append("category", category);
+            formData.append("isFeatured", String(isFeatured));
+            formData.append("sizes", sizes);
+            
+            // Images
+            for (const uri of images) {
+                const filename = uri.split('/').pop() || `image-${Date.now()}.jpg`;
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : 'image/jpg';
+                
+                formData.append("images", {
+                    uri: uri,
+                    name: filename,
+                    type: type
+                } as any);
+            }
+            
+            const { data } = await api.post("/products", formData, {
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                },
+            });
+            
+            if (!data?.success) throw new Error("Upload Failed");
+
+            Toast.show({
+                type: 'success',
+                text1: 'Success',
+                text2: 'Product Created Successfully'
+            });
+            
+            router.replace("/admin/products");
+        } catch (error: any) {
+            console.error("Error creating product:", error);
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to create product',
+                text2: error.response?.data?.message || "Something went wrong"
+            });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -76,7 +143,7 @@ export default function AddProduct() {
 
                 {/* CATEGORY */}
                 <Text className="text-secondary text-xs font-bold mb-1 uppercase">
-                    Category
+                    Category *
                 </Text>
                 <TouchableOpacity
                     onPress={() => setModalVisible(true)}
@@ -100,17 +167,15 @@ export default function AddProduct() {
                                     keyExtractor={(item) => String(item.id)}
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
-                                            className={`p-4 border-b ${category === item.name ? "bg-primary/5" : ""
-                                                }`}
+                                            className={`p-4 border-b border-gray-100 ${category === item.name ? "bg-primary/5" : ""}`}
                                             onPress={() => {
                                                 setCategory(item.name);
                                                 setModalVisible(false);
                                             }}
                                         >
-                                            <View className="flex-row justify-between">
+                                            <View className="flex-row justify-between items-center">
                                                 <Text
-                                                    className={`${category === item.name ? "font-bold text-primary" : ""
-                                                        }`}
+                                                    className={`${category === item.name ? "font-bold text-primary" : "text-primary"}`}
                                                 >
                                                     {item.name}
                                                 </Text>
@@ -155,7 +220,7 @@ export default function AddProduct() {
 
                 {/* IMAGE PICKER */}
                 <Text className="text-secondary text-xs font-bold mb-1 uppercase">
-                    Product Images (max 5)
+                    Product Images (max 5) *
                 </Text>
 
                 <TouchableOpacity onPress={pickImages} className="mb-4">
@@ -190,6 +255,8 @@ export default function AddProduct() {
                 <TextInput
                     className="bg-surface p-3 rounded-lg mb-6 text-primary h-24"
                     multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
                     value={description}
                     onChangeText={setDescription}
                 />
@@ -208,8 +275,7 @@ export default function AddProduct() {
                 <TouchableOpacity
                     onPress={handleSubmit}
                     disabled={submitting}
-                    className={`bg-primary p-4 rounded-xl items-center ${submitting ? "opacity-70" : ""
-                        }`}
+                    className={`bg-primary p-4 rounded-xl items-center ${submitting ? "opacity-70" : ""}`}
                 >
                     {submitting ? (
                         <ActivityIndicator color="white" />
