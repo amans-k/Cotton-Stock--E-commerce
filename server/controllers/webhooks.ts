@@ -29,3 +29,7 @@ export const clerkWebhook = async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: "Error verifying webhook" });
     }
 };
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4e17078e8fbb711134b7cf77799c6269f6346d66
