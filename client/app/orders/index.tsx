@@ -4,23 +4,34 @@ import { FlatList, Text, TouchableOpacity, View, ActivityIndicator, ScrollView, 
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Header from "@/components/Header";
+import api from "@/constants/api";
 import { COLORS, getStatusColor } from "@/constants";
 import type { Order } from "@/constants/types";
-import { dummyOrders, formatDate } from "@/assets/assets";
+import { useAuth } from "@clerk/clerk-expo";
+import { formatDate } from "@/assets/assets";
 
 export default function Orders() {
     const router = useRouter();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchOrders = async () => {
-        setOrders(dummyOrders as any[]);
-        setLoading(false);
-    };
+    const { getToken } = useAuth();
 
     useEffect(() => {
         fetchOrders();
     }, []);
+
+    const fetchOrders = async () => {
+        try {
+            const token = await getToken();
+            const { data } = await api.get("/orders", { headers: { Authorization: `Bearer ${token}` } });
+            setOrders(data.data);
+        } catch (error) {
+            console.error("Error fetching orders:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-surface" edges={['top']}>

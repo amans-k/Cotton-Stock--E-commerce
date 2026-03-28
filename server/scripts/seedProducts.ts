@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Product from "../models/Products.js";
+import Product from "../models/Product.js";
 
 const PRODUCTS = [
     {
@@ -951,8 +951,6 @@ export const seedProducts = async (uri: string) => {
         const products = await Product.find();
         if (products.length === 0) {
             await Product.insertMany(PRODUCTS);
-        } else {
-            console.log("Products already exist");
         }
     } catch (error) {
         console.error("Seeding Error:", error);

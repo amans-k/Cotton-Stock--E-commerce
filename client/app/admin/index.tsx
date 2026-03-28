@@ -1,13 +1,13 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ScrollView, Text, View, ActivityIndicator, RefreshControl } from "react-native";
-import { COLORS, getStatusColor } from "@/constants";
 import { useAuth } from "@clerk/clerk-expo";
 import api from "@/constants/api";
+import { COLORS, getStatusColor } from "@/constants";
 
 export default function AdminDashboard() {
-    const {getToken} = useAuth();
     const router = useRouter();
+    const { getToken } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [stats, setStats] = useState({
@@ -19,20 +19,20 @@ export default function AdminDashboard() {
     });
 
     const fetchStats = async () => {
-       try {
-         const token  = await getToken();
-         const {data} = await api.get ('/admin/stats',{headers: {
-             Authorization: `Bearer ${token}`  }})
-             if (data.success){
+        try {
+            const token = await getToken();
+            const { data } = await api.get('/admin/stats', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (data.success) {
                 setStats(data.data);
-             }
-       } catch (error) {
-        console.error("Failed to fetching admin stats:", error);
-       }
-       finally {
-        setLoading(false);
-        setRefreshing(false);
-       }
+            }
+        } catch (error) {
+            console.error("Failed to fetch admin stats:", error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
 
     useEffect(() => {

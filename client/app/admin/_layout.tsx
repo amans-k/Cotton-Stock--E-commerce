@@ -1,13 +1,14 @@
 import { Tabs, useRouter } from "expo-router";
+import { useUser } from "@clerk/clerk-expo";
 import { useEffect } from "react";
 import { View, ActivityIndicator, TouchableOpacity, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "@/constants";
-import { useUser } from "@clerk/clerk-expo";
 
 export default function AdminLayout() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
+
     useEffect(() => {
         if (isLoaded && (!user || user.publicMetadata?.role !== "admin")) {
             router.replace("/(tabs)");

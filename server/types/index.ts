@@ -8,10 +8,8 @@ export interface IAddress extends Document {
     state: string;
     zipCode: string;
     country: string;
-    phoneNumber: string;  // ✅ Added phone number
     isDefault: boolean;
     createdAt: Date;
-    updatedAt: Date;
 }
 
 export interface ICartItem {
@@ -48,7 +46,6 @@ export interface IOrder extends Document {
         state: string;
         zipCode: string;
         country: string;
-        phoneNumber: string;  // ✅ Added phone number in order
     };
     paymentMethod: "cash" | "stripe";
     paymentStatus: "pending" | "paid" | "failed" | "refunded";
@@ -97,5 +94,4 @@ export interface IWishlist extends Document {
     user: Types.ObjectId;
     products: Types.ObjectId[];
     createdAt: Date;
-    updatedAt: Date;
 }

@@ -1,9 +1,11 @@
-import api from "@/constants/api";
-import { Product } from "@/constants/types";
-import { useAuth } from "@clerk/clerk-expo";
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import Toast from "react-native-toast-message";
-   
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import api from '@/constants/api';
+import { Product } from '@/constants/types';
+import { useAuth } from '@clerk/clerk-expo';
+import Toast from 'react-native-toast-message';
+
+export { Product };
+
 export type CartItem = {
     id: string;
     productId: string;
@@ -11,23 +13,25 @@ export type CartItem = {
     quantity: number;
     size: string;
     price: number;
-}
+};
 
 type CartContextType = {
     cartItems: CartItem[];
     addToCart: (product: Product, size: string) => Promise<void>;
-    removeFromCart: (productId: string, size: string) => Promise<void>;
-    updateQuantity: (productId: string, quantity: number, size: string) => Promise<void>;
+    removeFromCart: (itemId: string, size: string) => Promise<void>;
+    updateQuantity: (itemId: string, quantity: number, size: string) => Promise<void>;
     clearCart: () => Promise<void>;
     cartTotal: number;
     itemCount: number;
     isLoading: boolean;
-}
+};
 
-const CartContext = createContext<CartContextType | undefined>(undefined)
+const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-    const { getToken, isSignedIn } = useAuth();
+    const { isSignedIn } = useAuth();
+    const { getToken } = useAuth();
+
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [cartTotal, setCartTotal] = useState(0);
@@ -44,63 +48,57 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     productId: item.product._id,
                     product: item.product,
                     quantity: item.quantity,
-                    size: item.size || 'M',
+                    size: item?.size || "M",
                     price: item.price
                 }));
                 setCartItems(mappedItems);
                 setCartTotal(serverCart.totalAmount);
             }
         } catch (error) {
-            console.error("Failed to fetching cart:", error);
+            console.error("Failed to fetch cart:", error);
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     const addToCart = async (product: Product, size: string) => {
         if (!isSignedIn) {
-            Toast.show({
+            return Toast.show({
                 text1: 'Please login to add to cart',
-                text2: 'Login to continue',
                 type: 'error',
             });
-            return;
         }
+
         try {
             setIsLoading(true);
             const token = await getToken();
-            const { data } = await api.post('/cart/add', 
-                { productId: product._id, quantity: 1, size }, 
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const { data } = await api.post('/cart/add', { productId: product._id, quantity: 1, size }, { headers: { Authorization: `Bearer ${token}` } });
+
             if (data.success) {
                 await fetchCart();
-                Toast.show({
-                    text1: 'Added to Cart',
-                    text2: `${product.name} added successfully`,
-                    type: 'success',
-                });
             }
         } catch (error) {
             console.error("Failed to add to cart:", error);
             Toast.show({
                 text1: 'Failed to add to cart',
-                text2: 'Please try again',
                 type: 'error',
             });
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     const removeFromCart = async (productId: string, size: string) => {
         if (!isSignedIn) return;
+
         try {
             setIsLoading(true);
             const token = await getToken();
-            const { data } = await api.delete(`/cart/item/${productId}?size=${size}`, 
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const { data } = await api.delete(`/cart/item/${productId}?size=${size}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            });
             if (data.success) {
                 await fetchCart();
             }
@@ -109,18 +107,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
-    const updateQuantity = async (productId: string, quantity: number, size: string = 'M') => {
+    const updateQuantity = async (productId: string, quantity: number, size: string = "M") => {
         if (!isSignedIn) return;
         if (quantity < 1) return;
+
         try {
             setIsLoading(true);
             const token = await getToken();
-            const { data } = await api.put(`/cart/item/${productId}`,
-                { quantity, size }, 
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const { data } = await api.put(`/cart/item/${productId}`, { quantity, size }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             if (data.success) {
                 await fetchCart();
             }
@@ -129,16 +127,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     const clearCart = async () => {
         if (!isSignedIn) return;
+
         try {
             setIsLoading(true);
             const token = await getToken();
-            const { data } = await api.delete(`/cart`, 
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            const { data } = await api.delete('/cart', {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            });
             if (data.success) {
                 setCartItems([]);
                 setCartTotal(0);
@@ -148,7 +149,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -162,25 +163,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, [isSignedIn]);
 
     return (
-        <CartContext.Provider value={{ 
-            cartItems,
-            addToCart,
-            removeFromCart,
-            updateQuantity,
-            clearCart,
-            cartTotal,
-            itemCount,
-            isLoading
-        }}>
+        <CartContext.Provider
+            value={{
+                cartItems,
+                addToCart,
+                removeFromCart,
+                updateQuantity,
+                clearCart,
+                cartTotal,
+                itemCount,
+                isLoading
+            }}
+        >
             {children}
         </CartContext.Provider>
-    )
+    );
 }
 
 export function useCart() {
     const context = useContext(CartContext);
     if (context === undefined) {
-        throw new Error("useCart must be used within a CartProvider");
+        throw new Error('useCart must be used within a CartProvider');
     }
     return context;
 }

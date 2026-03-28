@@ -1,35 +1,36 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, RefreshControl, Image, Alert } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View, ActivityIndicator, RefreshControl, Image, Alert, Platform } from "react-native";
+import Toast from 'react-native-toast-message';
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS } from "@/constants";
 import { useAuth } from "@clerk/clerk-expo";
 import api from "@/constants/api";
-import Toast from "react-native-toast-message";
+import { COLORS } from "@/constants";
 
 export default function AdminProducts() {
-     const {getToken} = useAuth();
     const router = useRouter();
+    const { getToken } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [products, setProducts] = useState([]);
 
     const fetchProducts = async () => {
-       try {
-        const {data} = await api.get("/products" ,{params:{limit:999}});
-        if(data.success){
-            setProducts(data.data);}
-       } catch (error: any) {
-         console.error("Error fetching products:", error);
-         Toast.show({
-             type: 'error',
-             text1: 'Failed to Fetch Products',
-             text2: error.response?.data?.message || "Something went wrong"
-         })
-       } finally {
-        setLoading(false);
-        setRefreshing(false);
-       }
+        try {
+            const { data } = await api.get('/products', { params: { limit: 9999 } });
+            if (data.success) {
+                setProducts(data.data);
+            }
+        } catch (error: any) {
+            console.error("Failed to fetch products:", error);
+            Toast.show({
+                type: 'error',
+                text1: 'Failed to Fetch Products',
+                text2: error.response?.data?.message || "Something went wrong"
+            });
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
 
     useEffect(() => {
@@ -43,41 +44,47 @@ export default function AdminProducts() {
 
     const performDelete = async (id: string) => {
         try {
-            const  token = await getToken();
-            const {data} = await api.delete(`/products/${id}`,{headers: {
-                Authorization: `Bearer ${token}`
-            }});
-            if(data.success){
+            const token = await getToken();
+            const { data } = await api.delete(`/products/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (data.success) {
                 Toast.show({
                     type: 'success',
-                    text1: 'success',
-                    text2: " Product deleted "
+                    text1: 'Success',
+                    text2: 'Product deleted'
                 });
                 fetchProducts();
             }
         } catch (error: any) {
-            console.error("Error deleting product:", error);
+            console.error("Failed to delete product:", error);
             Toast.show({
                 type: 'error',
                 text1: 'Failed to Delete Product',
                 text2: error.response?.data?.message || "Something went wrong"
-            })
+            });
         }
     };
 
     const deleteProduct = async (id: string) => {
-        Alert.alert(
-            "Delete Product",
-            "Are you sure you want to delete this product?",
-            [
-                { text: "Cancel", style: "cancel" as const },
-                {
-                    text: "Delete",
-                    style: "destructive" as const,
-                    onPress: () => performDelete(id)
-                }
-            ]
-        );
+        if (Platform.OS === 'web') {
+            if (window.confirm("Are you sure you want to delete this product?")) {
+                performDelete(id);
+            }
+        } else {
+            Alert.alert(
+                "Delete Product",
+                "Are you sure you want to delete this product?",
+                [
+                    { text: "Cancel", style: "cancel" as const },
+                    {
+                        text: "Delete",
+                        style: "destructive" as const,
+                        onPress: () => performDelete(id)
+                    }
+                ]
+            );
+        }
     };
 
     if (loading && !refreshing) {
