@@ -3,13 +3,39 @@ import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import { Request, Response } from "express";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Initialize Stripe only if secret key exists
+let stripe: Stripe | null = null;
+
+try {
+    if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '_______stripe_secret_key_______') {
+        stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        console.log("Stripe initialized successfully");
+    } else {
+        console.log("Stripe not configured - payment features disabled");
+    }
+} catch (error) {
+    console.error("Failed to initialize Stripe:", error);
+}
 
 // Create Checkout Session
 // POST /api/payment/checkout
 export const createCheckoutSession = async (req: Request, res: Response) => {
     try {
+        if (!stripe) {
+            return res.status(503).json({ 
+                success: false, 
+                message: "Payment service is not configured" 
+            });
+        }
+
         const { items, shipping, success_url, cancel_url, orderId } = req.body;
+
+        if (!items || items.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "No items provided" 
+            });
+        }
 
         const lineItems = items.map((item: any) => ({
             price_data: {
@@ -23,7 +49,7 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
             quantity: item.quantity,
         }));
 
-        if (shipping > 0) {
+        if (shipping && shipping > 0) {
             lineItems.push({
                 price_data: {
                     currency: "usd",
@@ -44,41 +70,53 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
             cancel_url: cancel_url || "https://cancel.com",
             payment_intent_data: {
                 metadata: {
-                    orderId: orderId,
+                    orderId: orderId || "",
                     appId: "forever-app",
                 },
             },
         });
 
-        res.json({ id: session.id, url: session.url });
+        res.json({ success: true, id: session.id, url: session.url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error("Checkout session error:", error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
 // Handle Stripe Webhook
 // POST /api/stripe
 export const handleStripeWebhook = async (req: Request, res: Response) => {
-    const sig = req.headers["stripe-signature"];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    let event;
-
     try {
-        event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret as string);
-    } catch (err: any) {
-        console.error(`Webhook Error: ${err.message}`);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+        if (!stripe) {
+            return res.status(503).json({ 
+                success: false, 
+                message: "Payment service is not configured" 
+            });
+        }
 
-    const { orderId, appId } = (event.data.object as any).metadata;
+        const sig = req.headers["stripe-signature"];
+        const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    if (appId !== "forever-app") {
-        return res.status(400).send("Invalid app id");
-    }
+        if (!sig || !endpointSecret || endpointSecret === '_______stripe_webhook_secret_______') {
+            return res.status(400).send("Webhook not configured");
+        }
 
-    // Handle the event
-    try {
+        let event;
+
+        try {
+            event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret as string);
+        } catch (err: any) {
+            console.error(`Webhook Error: ${err.message}`);
+            return res.status(400).send(`Webhook Error: ${err.message}`);
+        }
+
+        const { orderId, appId } = (event.data.object as any).metadata || {};
+
+        if (appId !== "forever-app") {
+            return res.status(400).send("Invalid app id");
+        }
+
+        // Handle the event
         switch (event.type) {
             case "payment_intent.succeeded":
                 let order;
@@ -104,17 +142,22 @@ export const handleStripeWebhook = async (req: Request, res: Response) => {
                         cart.totalAmount = 0;
                         await cart.save();
                     }
+                    console.log(`Order ${order._id} payment succeeded`);
                 } else {
                     console.warn(`Order not found for PaymentIntent ${event.data.object.id}`);
                 }
                 break;
 
             case "payment_intent.canceled":
-                await Order.findByIdAndUpdate(orderId, { paymentStatus: "failed", orderStatus: "cancelled" });
+                if (orderId) {
+                    await Order.findByIdAndUpdate(orderId, { paymentStatus: "failed", orderStatus: "cancelled" });
+                }
                 break;
 
             case "payment_intent.payment_failed":
-                await Order.findByIdAndUpdate(orderId, { paymentStatus: "failed", orderStatus: "cancelled" });
+                if (orderId) {
+                    await Order.findByIdAndUpdate(orderId, { paymentStatus: "failed", orderStatus: "cancelled" });
+                }
                 break;
 
             default:

@@ -25,8 +25,10 @@ app.post("/api/clerk", express.raw({ type: "application/json" }), clerkWebhook);
 // Middleware
 app.use(cors());
 
-// Stripe Webhook
-process.env.STRIPE_SECRET_KEY && app.post("/api/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
+// Stripe Webhook (only if STRIPE_SECRET_KEY is set)
+if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '_______stripe_secret_key_______') {
+    app.post("/api/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
+}
 
 app.use(express.json());
 app.use(clerkMiddleware());
@@ -41,14 +43,19 @@ app.use("/api/orders", OrderRouter);
 app.use("/api/addresses", AddressRouter);
 app.use("/api/wishlist", WishlistRouter);
 app.use("/api/admin", AdminRouter);
-process.env.STRIPE_SECRET_KEY && app.use("/api/payments", paymentRouter);
+
+if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '_______stripe_secret_key_______') {
+    app.use("/api/payments", paymentRouter);
+}
 
 const PORT = process.env.PORT || 3000;
 
 await makeAdmin();
 
-// Seed products if no products are present
-await seedProducts(process.env.MONGODB_URI as string);
+// Seed products in background (don't block server startup)
+seedProducts(process.env.MONGODB_URI as string).catch(err => {
+    console.error("Failed to seed products:", err);
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
